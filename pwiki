@@ -1,0 +1,183 @@
+#!/bin/bash
+set -euo pipefail
+IFS=$'\n\t'
+
+show_help() {
+    echo "$0 Interact with personal wiki files"
+    echo ""
+    echo "Usage:"
+    echo ""
+    echo "  $0 WIKI_NAME ACTION OPTION"
+    echo ""
+    echo "Examples:"
+    echo ""
+    echo "  $0 WIKI_NAME new/n - Create an entry"
+    echo "  $0 WIKI_NAME filename/f - Search for filename"
+    echo "  $0 WIKI_NAME date/d [DATE_STR] - Open note for a day"
+    echo "  $0 WIKI_NAME content/c - Search for content"
+    echo "  $0 WIKI_NAME tag/t - Search for tag"
+    echo "  $0 WIKI_NAME git/g - Interact with git"
+    echo ""
+}
+
+function get_wiki_path {
+    local OPTS
+
+    if [ ! -f "$HOME/.pwiki" ]; then
+        echo "ERROR: No config file found." 1>&2
+        echo "" 1>&2
+        echo "Please run 'echo \"personal:/home/$USER/Documents/Personal Wiki\" > ~/.pwiki'" 1>&2
+        exit 1
+    fi
+
+    if ! OPTS="$(grep "^$1" "$HOME/.pwiki" | sed 's/^[^:]\+://')"; then
+        echo "Error: Input '${1}' resolves to no wikis" 1>&2
+        exit 1
+    fi
+    if [ "$(echo "$OPTS" | wc -l)" -gt 1 ]; then
+        echo "Error: Input '${1}' resolves to multiple wikis" 1>&2
+        exit 1
+    fi
+    echo "$OPTS"
+}
+
+function search_date {
+    local DIRECTORY
+    local DATE
+    local EXITCODE
+
+    DIRECTORY=$1
+
+    DATE=$(date -I)
+    if [ $# -gt 1 ]; then
+        if ! DATE="$(date -I -d "$2" 2>/dev/null)"; then
+            echo "Invalid date '${2}'" 1>&2
+            exit 1
+        fi
+        echo "${DATE}.md"
+        return 0
+    fi
+
+    DATE=$(\
+        find "$DIRECTORY" -type f -name "*.md"  -printf '%P\n' | \
+        grep "^diary/" | \
+        sed 's/\.md$//' | \
+        grep -v "^diary/${DATE}$" | \
+        sort -r |
+        sed "1 idiary/$DATE" | \
+        sed '$a<NEW>' | \
+        run_fzf "${@:2}" \
+    )
+
+    EXITCODE=$?
+    if [ $EXITCODE -ne 0 ]; then
+        exit $EXITCODE
+    fi
+
+    if [[ "$DATE" == '<NEW>' ]]; then
+        echo "$DATE"
+        return 0
+    fi
+
+    echo "${DATE}.md"
+
+}
+
+function run_fzf {
+    if [ "$#" -gt 0 ]; then
+        fzf --ansi -q "$1"
+    else
+        fzf --ansi
+    fi
+}
+
+function search_filename {
+    local DIRECTORY
+    local NAME
+    local DATE
+
+    DIRECTORY=$1
+    DATE=$(date -I)
+    NAME=$(\
+        find "$DIRECTORY" -type f -name "*.md"  -printf '%P\n' | \
+        sed 's/\.md$//' | \
+        grep -v "^diary/${DATE}$" | \
+        sort |
+        sed "1 idiary/$DATE" | \
+        sed '$a<NEW>' | \
+        run_fzf "${@:2}" \
+    )
+    # RE='^[0-9]{4}\-[0-9][0-9]\-[0-9][0-9]$'
+    if [[ "$NAME" == '<NEW>' ]]; then
+        echo "$NAME"
+        return 0
+    fi
+    echo "${NAME}.md"
+}
+
+function search_tag {
+    echo "Tag Searching not implemented"
+    exit 1
+}
+
+function search_content {
+    local OUT
+    # --color=always --line-number 
+    OUT="$(cd "$1" && rg --no-line-number --column --no-heading --type markdown . | sed 's/^\([^:]\+\)\.md:1:/\1: /' | run_fzf "${@:2}")"
+    echo "${OUT//\:*/}"
+}
+
+function run_git {
+    git -C "$1" "${@:2}"
+}
+
+if [ $# -lt 2 ]; then
+    show_help
+    exit 1
+fi
+
+FOUND=''
+WIKI=$(get_wiki_path "$1");
+
+if [ "${2:0:1}" == "d" ]; then
+    FOUND=$(search_date "$WIKI" "${@:3}")
+fi
+
+if [ "${2:0:1}" == "f" ]; then
+    FOUND=$(search_filename "$WIKI" "${@:3}")
+fi
+
+if [ "${2:0:1}" == "c" ]; then
+    FOUND=$(search_content "$WIKI" "${@:3}")
+fi
+
+if [ "${2:0:1}" == "t" ]; then
+    FOUND=$(search_tag "$WIKI" "${@:3}")
+fi
+
+if [ "${2:0:1}" == "n" ]; then
+    FOUND='<NEW>'
+fi
+
+if [ "${2:0:1}" == "g" ]; then
+    run_git "$WIKI" "${@:3}"
+    exit 0
+fi
+
+if [[ "$FOUND" == '<NEW>' ]]; then
+    read -r -p "Please enter new name: " FOUND
+    if [ ${#FOUND} -gt 0 ]; then
+        FOUND="${FOUND}.md"
+    else
+        echo "No name specified"
+        exit 1
+    fi
+fi
+
+if [ ${#FOUND} -eq 0 ]; then
+    echo "No valid action"
+    exit 1
+fi
+
+echo mkdir -p "$WIKI/$(dirname "$FOUND")"
+echo "$EDITOR" "${WIKI}/${FOUND}"
