@@ -179,5 +179,5 @@ if [ ${#FOUND} -eq 0 ]; then
     exit 1
 fi
 
-echo mkdir -p "$WIKI/$(dirname "$FOUND")"
-echo "$EDITOR" "${WIKI}/${FOUND}"
+mkdir -p "$WIKI/$(dirname "$FOUND")"
+"$EDITOR" "${WIKI}/${FOUND}"
