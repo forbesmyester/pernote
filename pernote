@@ -124,7 +124,7 @@ function search_content {
     local OUT
     # --color=always --line-number 
     OUT="$(cd "$1" && rg --no-line-number --column --no-heading --type markdown . | sed 's/^\([^:]\+\)\.md:1:/\1: /' | run_fzf "${@:2}")"
-    echo "${OUT//\:*/}"
+    echo "${OUT//\:*/}.md"
 }
 
 function run_git {
