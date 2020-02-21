@@ -23,14 +23,14 @@ show_help() {
 function get_wiki_path {
     local OPTS
 
-    if [ ! -f "$HOME/.pwiki" ]; then
+    if [ ! -f "$HOME/.pernote" ]; then
         echo "ERROR: No config file found." 1>&2
         echo "" 1>&2
-        echo "Please run 'echo \"personal:/home/$USER/Documents/Personal Wiki\" > ~/.pwiki'" 1>&2
+        echo "Please run 'echo \"personal:/home/$USER/Documents/Personal Wiki\" > ~/.pernote'" 1>&2
         exit 1
     fi
 
-    if ! OPTS="$(grep "^$1" "$HOME/.pwiki" | sed 's/^[^:]\+://')"; then
+    if ! OPTS="$(grep "^$1" "$HOME/.pernote" | sed 's/^[^:]\+://')"; then
         echo "Error: Input '${1}' resolves to no wikis" 1>&2
         exit 1
     fi
