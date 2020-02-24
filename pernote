@@ -17,6 +17,7 @@ show_help() {
     echo "  $0 WIKI_NAME content/c - Search for content"
     echo "  $0 WIKI_NAME tag/t - Search for tag"
     echo "  $0 WIKI_NAME git/g - Interact with git"
+    echo "  $0 WIKI_NAME sync/s - Synchronize with GIT repository"
     echo ""
 }
 
@@ -161,6 +162,14 @@ fi
 
 if [ "${2:0:1}" == "g" ]; then
     run_git "$WIKI" "${@:3}"
+    exit 0
+fi
+
+if [ "${2:0:1}" == "s" ]; then
+    git -C "$WIKI" add .
+    git -C "$WIKI" commit -m 'commit'
+    git -C "$WIKI" pull
+    git -C "$WIKI" push
     exit 0
 fi
 
