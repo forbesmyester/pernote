@@ -15,7 +15,7 @@ show_help() {
     echo "  $0 WIKI_NAME filename/f - Search for filename"
     echo "  $0 WIKI_NAME date/d [DATE_STR] - Open note for a day"
     echo "  $0 WIKI_NAME content/c - Search for content"
-    echo "  $0 WIKI_NAME rebuild-index/r - Rebuild index"
+    echo "  $0 WIKI_NAME build-index/b - Build index"
     echo "  $0 WIKI_NAME index-search/i - Search the index"
     echo "  $0 WIKI_NAME git/g - Interact with git"
     echo "  $0 WIKI_NAME sync/s - Synchronize with GIT repository"
@@ -109,7 +109,9 @@ function search_filename {
         sed '$a<NEW>' | \
         run_fzf "${@:2}" \
     )
-    # RE='^[0-9]{4}\-[0-9][0-9]\-[0-9][0-9]$'
+    if [ $? -ne 0 ]; then
+        exit $?
+    fi
     if [[ "$NAME" == '<NEW>' ]]; then
         echo "$NAME"
         return 0
@@ -117,15 +119,13 @@ function search_filename {
     echo "${NAME}.md"
 }
 
-function search_tag {
-    echo "Tag Searching not implemented"
-    exit 1
-}
-
 function search_content {
     local OUT
     # --color=always --line-number 
     OUT="$(cd "$1" && rg --no-line-number --column --no-heading --type markdown . | sed 's/^\([^:]\+\)\.md:1:/\1: /' | run_fzf "${@:2}")"
+    if [ $? -ne 0 ]; then
+        exit $?
+    fi
     echo "${OUT//\:*/}.md"
 }
 
@@ -153,10 +153,6 @@ if [ "${2:0:1}" == "c" ]; then
     FOUND=$(search_content "$WIKI" "${@:3}")
 fi
 
-if [ "${2:0:1}" == "t" ]; then
-    FOUND=$(search_tag "$WIKI" "${@:3}")
-fi
-
 if [ "${2:0:1}" == "n" ]; then
     FOUND='<NEW>'
 fi
@@ -166,7 +162,7 @@ if [ "${2:0:1}" == "g" ]; then
     exit 0
 fi
 
-if [ "${2:0:1}" == "r" ]; then
+if [ "${2:0:1}" == "b" ]; then
     pernote-index -r "$WIKI" > "${WIKI}/.pernote-index"
     exit 0
 fi
