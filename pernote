@@ -15,7 +15,8 @@ show_help() {
     echo "  $0 WIKI_NAME filename/f - Search for filename"
     echo "  $0 WIKI_NAME date/d [DATE_STR] - Open note for a day"
     echo "  $0 WIKI_NAME content/c - Search for content"
-    echo "  $0 WIKI_NAME tag/t - Search for tag"
+    echo "  $0 WIKI_NAME rebuild-index/r - Rebuild index"
+    echo "  $0 WIKI_NAME index-search/i - Search the index"
     echo "  $0 WIKI_NAME git/g - Interact with git"
     echo "  $0 WIKI_NAME sync/s - Synchronize with GIT repository"
     echo ""
@@ -165,6 +166,22 @@ if [ "${2:0:1}" == "g" ]; then
     exit 0
 fi
 
+if [ "${2:0:1}" == "r" ]; then
+    pernote-index -r "$WIKI" > "${WIKI}/.pernote-index"
+    exit 0
+fi
+
+if [ "${2:0:1}" == "i" ]; then
+    FOUND=$(fzf < "${WIKI}/.pernote-index")
+    TARGET=$(echo "$FOUND" | sed 's/.*:: *//' | sed 's/ *$//')
+    SOURCE=$(echo "$FOUND" | sed 's/^[a-z]\+ *:\+ *//' | sed 's/:.*//' | sed 's/ *$//')
+    SELECTION=$(whiptail --title "Which do you want to open?" --notags --fb --menu --nocancel "Open source or target?"  15 50 3 "s" "Source: $SOURCE" "t" "Target: $TARGET" 3>&1 1>&2 2>&3)
+    FOUND="${SOURCE}.md"
+    if [ "$SELECTION" == 't' ]; then
+        FOUND="$TARGET"
+    fi
+fi
+
 if [ "${2:0:1}" == "s" ]; then
     git -C "$WIKI" add .
     git -C "$WIKI" commit -m 'commit'
@@ -188,5 +205,10 @@ if [ ${#FOUND} -eq 0 ]; then
     exit 1
 fi
 
+WEBSITE_RE='^https?\:\/\/'
+if [[ "$FOUND" =~ $WEBSITE_RE ]]; then
+    xdg-open "$FOUND"
+    exit 0
+fi
 mkdir -p "$WIKI/$(dirname "$FOUND")"
-"$EDITOR" "${WIKI}/${FOUND}"
+$EDITOR "${WIKI}/${FOUND}"
