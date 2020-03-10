@@ -1,4 +1,16 @@
 #!/bin/bash
+
+# POSSIBLE_INDEX_LOCATIONS=("$( cd "$(dirname "$0")" ; pwd -P )")
+# if command -v basher; then
+#     echo bb
+#     POSSIBLE_INDEX_LOCATIONS+=("$(basher package-path forbesmyester/pernote)")
+#     echo bob
+# fi
+
+# for PP in "${POSSIBLE_INDEX_LOCATIONS[@]}";do
+#     echo ">> $PP"
+# done
+
 set -euo pipefail
 IFS=$'\n\t'
 
@@ -15,8 +27,8 @@ show_help() {
     echo "  $0 WIKI_NAME filename/f - Search for filename"
     echo "  $0 WIKI_NAME date/d [DATE_STR] - Open note for a day"
     echo "  $0 WIKI_NAME content/c - Search for content"
-    echo "  $0 WIKI_NAME build-index/b - Build index"
-    echo "  $0 WIKI_NAME index-search/i - Search the index"
+    echo "  $0 WIKI_NAME buildindex/b - Build index"
+    echo "  $0 WIKI_NAME indexsearch/i - Search the index"
     echo "  $0 WIKI_NAME git/g - Interact with git"
     echo "  $0 WIKI_NAME sync/s - Synchronize with GIT repository"
     echo ""
@@ -46,7 +58,6 @@ function get_wiki_path {
 function search_date {
     local DIRECTORY
     local DATE
-    local EXITCODE
 
     DIRECTORY=$1
 
@@ -60,7 +71,7 @@ function search_date {
         return 0
     fi
 
-    DATE=$(\
+    if ! DATE=$(\
         find "$DIRECTORY" -type f -name "*.md"  -printf '%P\n' | \
         grep "^diary/" | \
         sed 's/\.md$//' | \
@@ -69,11 +80,8 @@ function search_date {
         sed "1 idiary/$DATE" | \
         sed '$a<NEW>' | \
         run_fzf "${@:2}" \
-    )
-
-    EXITCODE=$?
-    if [ $EXITCODE -ne 0 ]; then
-        exit $EXITCODE
+    ); then
+        exit 1
     fi
 
     if [[ "$DATE" == '<NEW>' ]]; then
@@ -100,7 +108,7 @@ function search_filename {
 
     DIRECTORY=$1
     DATE=$(date -I)
-    NAME=$(\
+    if ! NAME=$(\
         find "$DIRECTORY" -type f -name "*.md"  -printf '%P\n' | \
         sed 's/\.md$//' | \
         grep -v "^diary/${DATE}$" | \
@@ -108,9 +116,8 @@ function search_filename {
         sed "1 idiary/$DATE" | \
         sed '$a<NEW>' | \
         run_fzf "${@:2}" \
-    )
-    if [ $? -ne 0 ]; then
-        exit $?
+    ); then
+        exit 1
     fi
     if [[ "$NAME" == '<NEW>' ]]; then
         echo "$NAME"
@@ -119,12 +126,34 @@ function search_filename {
     echo "${NAME}.md"
 }
 
+function search_indexsearch {
+    local FOUND
+    local TARGET
+    local WIDTH
+    local SOURCE
+
+    FOUND=$(fzf < "$1/.pernote-index")
+    if [ ${#FOUND} -eq 0 ]; then
+        echo ""
+        return
+    fi
+    TARGET=$(echo "$FOUND" | sed 's/.*:: *//' | sed 's/ *$//')
+    SOURCE=$(echo "$FOUND" | sed 's/^[a-z]\+ *:\+ *//' | sed 's/:.*//' | sed 's/ *$//')
+    WIDTH=$(tput cols)
+    WIDTH=$((WIDTH-10))
+    SELECTION=$(whiptail --title "Which do you want to open?" --notags --fb --menu --nocancel "Open source or target?"  15 "$WIDTH" 3 "s" "Source: $SOURCE" "t" "Target: $TARGET" 3>&1 1>&2 2>&3)
+    FOUND="${SOURCE}.md"
+    if [ "$SELECTION" == 't' ]; then
+        FOUND="$TARGET"
+    fi
+    echo "$FOUND"
+}
+
 function search_content {
     local OUT
     # --color=always --line-number 
-    OUT="$(cd "$1" && rg --no-line-number --column --no-heading --type markdown . | sed 's/^\([^:]\+\)\.md:1:/\1: /' | run_fzf "${@:2}")"
-    if [ $? -ne 0 ]; then
-        exit $?
+    if ! OUT="$(cd "$1" && rg --no-line-number --column --no-heading --type markdown . | sed 's/^\([^:]\+\)\.md:1:/\1: /' | run_fzf "${@:2}")"; then
+        exit 1
     fi
     echo "${OUT//\:*/}.md"
 }
@@ -133,81 +162,112 @@ function run_git {
     git -C "$1" "${@:2}"
 }
 
+function action_match {
+    local -n CONFIG="$1"
+    local INPUT="$2"
+    local -n RESULT=$3
+    MATCH_COUNT=1
+    while [ $MATCH_COUNT -gt 0 ]; do
+        MATCH_COUNT=0
+        for ACT in "${CONFIG[@]}"; do
+            RE="^$ACT\-?(.*)"
+            if [[ "$INPUT" =~ $RE ]]; then 
+                MATCH_COUNT=$(( MATCH_COUNT + 1 ))
+                RESULT+=("$ACT")
+                INPUT="${BASH_REMATCH[1]}"
+            fi
+            RE="^${ACT:0:1}\-?(.*)"
+            if [[ "$INPUT" =~ $RE ]]; then 
+                MATCH_COUNT=$(( MATCH_COUNT + 1 ))
+                RESULT+=("$ACT")
+                INPUT="${BASH_REMATCH[1]}"
+            fi
+        done
+    done
+}
+
+
+function execute_find {
+    local ACTION=$1
+    local WIKI="$2"
+    if ! RET="$("search_$ACTION" "$WIKI" "${@:3}")"; then
+        echo "Could not get document"
+        exit 1
+    fi
+    echo "$RET"
+}
+
 if [ $# -lt 2 ]; then
     show_help
     exit 1
 fi
 
-FOUND=''
-WIKI=$(get_wiki_path "$1");
+# shellcheck disable=SC2034  # Not Unused - BASH pass by name
+ACTION_CONFIG=("new" "filename" "date" "content" "buildindex" "indexsearch"
+    "git" "sync" "help")
 
-if [ "${2:0:1}" == "d" ]; then
-    FOUND=$(search_date "$WIKI" "${@:3}")
-fi
+declare -a ACTIONS
+action_match ACTION_CONFIG "$2" ACTIONS
 
-if [ "${2:0:1}" == "f" ]; then
-    FOUND=$(search_filename "$WIKI" "${@:3}")
-fi
-
-if [ "${2:0:1}" == "c" ]; then
-    FOUND=$(search_content "$WIKI" "${@:3}")
-fi
-
-if [ "${2:0:1}" == "n" ]; then
-    FOUND='<NEW>'
-fi
-
-if [ "${2:0:1}" == "g" ]; then
-    run_git "$WIKI" "${@:3}"
-    exit 0
-fi
-
-if [ "${2:0:1}" == "b" ]; then
-    pernote-index -r "$WIKI" > "${WIKI}/.pernote-index"
-    exit 0
-fi
-
-if [ "${2:0:1}" == "i" ]; then
-    FOUND=$(fzf < "${WIKI}/.pernote-index")
-    TARGET=$(echo "$FOUND" | sed 's/.*:: *//' | sed 's/ *$//')
-    SOURCE=$(echo "$FOUND" | sed 's/^[a-z]\+ *:\+ *//' | sed 's/:.*//' | sed 's/ *$//')
-    WIDTH=$(tput cols)
-    WIDTH=$((WIDTH-10))
-    echo $WIDTH
-    SELECTION=$(whiptail --title "Which do you want to open?" --notags --fb --menu --nocancel "Open source or target?"  15 "$WIDTH" 3 "s" "Source: $SOURCE" "t" "Target: $TARGET" 3>&1 1>&2 2>&3)
-    FOUND="${SOURCE}.md"
-    if [ "$SELECTION" == 't' ]; then
-        FOUND="$TARGET"
-    fi
-fi
-
-if [ "${2:0:1}" == "s" ]; then
-    git -C "$WIKI" add .
-    git -C "$WIKI" commit -m 'commit'
-    git -C "$WIKI" pull
-    git -C "$WIKI" push
-    exit 0
-fi
-
-if [[ "$FOUND" == '<NEW>' ]]; then
-    read -r -p "Please enter new name: " FOUND
-    if [ ${#FOUND} -gt 0 ]; then
-        FOUND="${FOUND}.md"
-    else
-        echo "No name specified"
-        exit 1
-    fi
-fi
-
-if [ ${#FOUND} -eq 0 ]; then
-    echo "No valid action"
+if [ ${#ACTIONS[@]} -eq 0 ]; then
     exit 1
 fi
 
-WEBSITE_RE='^https?\:\/\/'
-if [[ "$FOUND" =~ $WEBSITE_RE ]]; then
-    xdg-open "$FOUND"
-    exit 0
-fi
-mkdir -p "$WIKI/$(dirname "$FOUND")"
-$EDITOR "${WIKI}/${FOUND}"
+WIKI=$(get_wiki_path "$1");
+
+for ACTION in "${ACTIONS[@]}"; do
+
+    if [ "$ACTION" == "help" ]; then
+        show_help
+        continue
+    fi
+
+    if [ "$ACTION" == "git" ]; then
+        run_git "$WIKI" "${@:3}"
+        continue
+    fi
+
+    if [ "$ACTION" == "buildindex" ]; then
+        pernote-index -r "$WIKI" > "${WIKI}/.pernote-index"
+        continue
+    fi
+
+    if [ "$ACTION" == "sync" ]; then
+        echo git -C "$WIKI" add .
+        git -C "$WIKI" add .
+        echo git -C "$WIKI" commit -m 'commit'
+        git -C "$WIKI" commit -m 'commit' || true
+        echo git -C "$WIKI" pull
+        git -C "$WIKI" pull --no-edit || true
+        echo git -C "$WIKI" push
+        git -C "$WIKI" push || true
+        continue
+    fi
+
+    FOUND=""
+    if [ "$ACTION" == "date" ] || [ "$ACTION" == "indexsearch" ] || [ "$ACTION" == "filename" ] || [ "$ACTION" == "content" ]; then
+        if ! FOUND=$(execute_find "$ACTION" "$WIKI" "${@:3}"); then
+            echo "Could not get document"
+            exit 1
+        fi
+    fi
+    if [ "$ACTION" == "new" ]; then
+        read -r -p "Please enter new name: " FOUND
+        if [ ${#FOUND} -gt 0 ]; then
+            FOUND="${FOUND}.md"
+        fi
+    fi
+
+    if [ ${#FOUND} -eq 0 ]; then
+        echo "Was expecting a document name but found nothing"
+        exit 1
+    fi
+
+    WEBSITE_RE='^https?\:\/\/'
+    if [[ "$FOUND" =~ $WEBSITE_RE ]]; then
+        xdg-open "$FOUND"
+        exit 0
+    fi
+    mkdir -p "$WIKI/$(dirname "$FOUND")"
+    $EDITOR "${WIKI}/${FOUND}"
+done
