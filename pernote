@@ -28,9 +28,10 @@ show_help() {
     echo "  $0 WIKI_NAME date/d [DATE_STR] - Open note for a day"
     echo "  $0 WIKI_NAME content/c - Search for content"
     echo "  $0 WIKI_NAME buildindex/b - Build index"
-    echo "  $0 WIKI_NAME indexsearch/i - Search the index"
+    echo "  $0 WIKI_NAME searchindex/s - Search the index"
     echo "  $0 WIKI_NAME git/g - Interact with git"
-    echo "  $0 WIKI_NAME sync/s - Synchronize with GIT repository"
+    echo "  $0 WIKI_NAME remotesync/r - Synchronize with GIT repository"
+    echo "  $0 WIKI_NAME installdeps/i - Install dependencies"
     echo ""
 }
 
@@ -126,7 +127,7 @@ function search_filename {
     echo "${NAME}.md"
 }
 
-function search_indexsearch {
+function search_searchindex {
     local FOUND
     local TARGET
     local WIDTH
@@ -203,8 +204,8 @@ if [ $# -lt 2 ]; then
 fi
 
 # shellcheck disable=SC2034  # Not Unused - BASH pass by name
-ACTION_CONFIG=("new" "filename" "date" "content" "buildindex" "indexsearch"
-    "git" "sync" "help")
+ACTION_CONFIG=("new" "filename" "date" "content" "buildindex" "searchindex"
+    "git" "remotesync" "help" "installdeps")
 
 declare -a ACTIONS
 action_match ACTION_CONFIG "$2" ACTIONS
@@ -227,12 +228,19 @@ for ACTION in "${ACTIONS[@]}"; do
         continue
     fi
 
+    if [ "$ACTION" == "installdeps" ]; then
+        if ! OPTS="$(which pernote-index)"; then
+            npm install -g pernote-index
+        fi
+        continue
+    fi
+
     if [ "$ACTION" == "buildindex" ]; then
         pernote-index -r "$WIKI" > "${WIKI}/.pernote-index"
         continue
     fi
 
-    if [ "$ACTION" == "sync" ]; then
+    if [ "$ACTION" == "remotesync" ]; then
         echo git -C "$WIKI" add .
         git -C "$WIKI" add .
         echo git -C "$WIKI" commit -m 'commit'
@@ -245,7 +253,7 @@ for ACTION in "${ACTIONS[@]}"; do
     fi
 
     FOUND=""
-    if [ "$ACTION" == "date" ] || [ "$ACTION" == "indexsearch" ] || [ "$ACTION" == "filename" ] || [ "$ACTION" == "content" ]; then
+    if [ "$ACTION" == "date" ] || [ "$ACTION" == "searchindex" ] || [ "$ACTION" == "filename" ] || [ "$ACTION" == "content" ]; then
         if ! FOUND=$(execute_find "$ACTION" "$WIKI" "${@:3}"); then
             echo "Could not get document"
             exit 1
