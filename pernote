@@ -134,7 +134,13 @@ function search_searchindex {
     local WIDTH
     local SOURCE
 
-    FOUND=$(fzf --ansi -q "${@:2}" < "$1/.pernote-index")
+    FOUND=""
+    if [ "$#" -gt 1 ]; then
+        FOUND=$(fzf --ansi -q "${@:2}" < "$1/.pernote-index")
+    else
+        FOUND=$(fzf --ansi < "$1/.pernote-index")
+    fi
+
     if [ ${#FOUND} -eq 0 ]; then
         echo ""
         return
