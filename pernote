@@ -166,7 +166,8 @@ function search_content {
 }
 
 function run_git {
-    git -C "$1" "${@:2}"
+    cd "$1"
+    git "${@:2}"
 }
 
 function action_match {
@@ -283,5 +284,6 @@ for ACTION in "${ACTIONS[@]}"; do
         exit 0
     fi
     mkdir -p "$WIKI/$(dirname "$FOUND")"
-    $EDITOR "${WIKI}/${FOUND}"
+    cd "${WIKI}"
+    $EDITOR "${FOUND}"
 done
