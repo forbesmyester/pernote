@@ -129,6 +129,7 @@ function search_filename {
 
 function search_searchindex {
     local FOUND
+    local TYPE
     local TARGET
     local WIDTH
     local SOURCE
@@ -138,8 +139,13 @@ function search_searchindex {
         echo ""
         return
     fi
+    TYPE=$(echo "$FOUND" | sed 's/:.*//' | sed 's/ *$//')
     TARGET=$(echo "$FOUND" | sed 's/.*:: *//' | sed 's/ *$//')
-    SOURCE=$(echo "$FOUND" | sed 's/^[a-z]\+ *:\+ *//' | sed 's/:.*//' | sed 's/ *$//')
+    SOURCE=$(echo "$FOUND" | sed 's/^[a-z_]\+ *:\+ *//' | sed 's/:.*//' | sed 's/ *$//')
+    if [ "$TYPE" == "head" ] || [ "$TYPE" == "bad_link" ]; then
+        echo "${SOURCE}.md"
+        return
+    fi
     WIDTH=$(tput cols)
     WIDTH=$((WIDTH-10))
     SELECTION=$(whiptail --title "Which do you want to open?" --notags --fb --menu --nocancel "Open source or target?"  15 "$WIDTH" 3 "s" "Source: $SOURCE" "t" "Target: $TARGET" 3>&1 1>&2 2>&3)
