@@ -35,6 +35,14 @@ show_help() {
     echo ""
 }
 
+function new {
+    read -r -p "Please enter new name: " F
+    if [ ${#F} -gt 0 ]; then
+        F="${F}.md"
+    fi
+    echo "$F"
+}
+
 function get_wiki_path {
     local OPTS
 
@@ -121,7 +129,7 @@ function search_filename {
         exit 1
     fi
     if [[ "$NAME" == '<NEW>' ]]; then
-        echo "$NAME"
+        echo $(new)
         return 0
     fi
     echo "${NAME}.md"
@@ -273,10 +281,7 @@ for ACTION in "${ACTIONS[@]}"; do
         fi
     fi
     if [ "$ACTION" == "new" ]; then
-        read -r -p "Please enter new name: " FOUND
-        if [ ${#FOUND} -gt 0 ]; then
-            FOUND="${FOUND}.md"
-        fi
+        FOUND=$(new)
     fi
 
     if [ ${#FOUND} -eq 0 ]; then
